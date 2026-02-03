@@ -1,0 +1,174 @@
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.1.2
+    command:
+      - redpanda
+      - start
+      # Single unnamed listener so clients (confluent-kafka) that don't send a listener name get a valid broker address.
+      # Named listeners (internal/external) cause "Broker 0 has no listener named ''" when clients use default.
+      - --kafka-addr
+      - "0.0.0.0:9092"
+      - --advertise-kafka-addr
+      - "redpanda:9092"
+    ports:
+      - "9092:9092"
+    environment:
+      - REDPANDA_ENABLE_KAFKA_API=true
+      - REDPANDA_DEFAULT_LOG_LEVEL=warn
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlplatform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlplatform}
+      POSTGRES_DB: ${POSTGRES_DB:-mlplatform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlplatform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  init_kafka:
+    build:
+      context: .
+      dockerfile: services/init/Dockerfile
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    restart: "no"
+
+  producer:
+    build: ./services/producer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      init_kafka:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      EVENTS_RAW_TOPIC: events.raw
+      EVENTS_PER_SEC: ${EVENTS_PER_SEC:-5}
+    restart: unless-stopped
+
+  processor:
+    build:
+      context: .
+      dockerfile: services/stream_processor/Dockerfile
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      init_kafka:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      EVENTS_RAW_TOPIC: events.raw
+      FEATURES_ONLINE_TOPIC: features.online
+      CONSUMER_GROUP: processor
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-mlplatform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlplatform}
+      POSTGRES_DB: ${POSTGRES_DB:-mlplatform}
+    restart: unless-stopped
+
+  inference:
+    build: ./services/inference
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      MODEL_PATH: /models/model.pkl
+    volumes:
+      - ./models:/models:ro
+    restart: unless-stopped
+
+  trainer:
+    build:
+      context: .
+      dockerfile: services/trainer/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-mlplatform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlplatform}
+      POSTGRES_DB: ${POSTGRES_DB:-mlplatform}
+      REDIS_URL: redis://redis:6379/0
+      MODEL_OUTPUT_PATH: /models/model.pkl
+      METRICS_OUTPUT_PATH: /models/metrics.json
+    volumes:
+      - ./models:/models
+    profiles:
+      - training
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    depends_on:
+      inference:
+        condition: service_started
+      processor:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: 3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  grafana_data:
