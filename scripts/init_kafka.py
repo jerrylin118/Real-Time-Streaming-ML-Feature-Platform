@@ -10,9 +10,15 @@ except ImportError:
     print("confluent-kafka not installed")
     sys.exit(1)
 
+DEFAULT_MAX_ATTEMPTS = 10
+DEFAULT_RETRY_SLEEP_SEC = 3
+
 
 def main():
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    max_attempts = int(os.environ.get("INIT_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS))
+    retry_sleep = float(os.environ.get("INIT_RETRY_SLEEP_SEC", DEFAULT_RETRY_SLEEP_SEC))
+
     client = AdminClient({"bootstrap.servers": bootstrap})
 
     topics = [
@@ -20,7 +26,7 @@ def main():
         NewTopic("features.online", num_partitions=4, replication_factor=1),
     ]
 
-    for attempt in range(10):
+    for attempt in range(max_attempts):
         try:
             fs = client.create_topics(topics)
             for topic, f in fs.items():
@@ -34,8 +40,9 @@ def main():
                         raise
             return 0
         except Exception as e:
-            print(f"Attempt {attempt + 1}/10 failed: {e}")
-            time.sleep(3)
+            print(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
+            if attempt < max_attempts - 1:
+                time.sleep(retry_sleep)
 
     print("Failed to create topics")
     return 1
