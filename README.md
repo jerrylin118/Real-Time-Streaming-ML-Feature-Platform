@@ -18,7 +18,7 @@ A production-grade **Streaming Feature Pipeline + Real-time ML Inference** syste
 └──────┬───────┘    │  • Rolling windows (sorted sets)             │    │  • Dedup store  │
        │            │  • Feature computation                       │    └────────┬────────┘
        │            │  • Bayesian CTR smoothing                    │             │
-       │            └─────────────────────────────────────────────┘             │
+       │            └──────────────────────────────────────────────┘             │
        │                              │                     │                    │
        │                              │ features.online     │ INSERT             │
        │                              ▼                     ▼                    │
