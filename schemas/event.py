@@ -36,10 +36,16 @@ class Event:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Event":
+        event_type = d["event_type"]
+        if event_type not in EVENT_TYPES:
+            raise ValueError(f"event_type must be one of {EVENT_TYPES}, got {event_type!r}")
+        ts = int(d["ts"])
+        if ts < 0:
+            raise ValueError("ts must be non-negative")
         return cls(
             event_id=str(d["event_id"]),
-            event_type=d["event_type"],
-            ts=int(d["ts"]),
+            event_type=event_type,
+            ts=ts,
             user_id=str(d["user_id"]),
             item_id=str(d["item_id"]),
             session_id=str(d["session_id"]),
