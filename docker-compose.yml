@@ -1,3 +1,5 @@
+# Streaming ML Platform - all services resolve each other by Docker service name.
+# Override env vars (e.g. EVENTS_PER_SEC, POSTGRES_*) via shell or .env file.
 services:
   redpanda:
     image: redpandadata/redpanda:v24.1.2
