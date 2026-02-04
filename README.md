@@ -12,7 +12,7 @@ A production-grade **Streaming Feature Pipeline + Real-time ML Inference** syste
                                     └────────┬────────┘
                                              │ events.raw
                                              ▼
-┌──────────────┐    ┌─────────────────────────────────────────────┐    ┌─────────────────┐
+┌──────────────┐    ┌──────────────────────────────────────────────┐    ┌─────────────────┐
 │   Redpanda   │◄───│              Stream Processor                │───►│     Redis       │
 │  (Kafka API) │    │  • Deduplication (Redis)                     │    │  • Online store │
 └──────┬───────┘    │  • Rolling windows (sorted sets)             │    │  • Dedup store  │
