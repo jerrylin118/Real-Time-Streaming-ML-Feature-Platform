@@ -21,6 +21,9 @@ FEATURE_COMPUTE_LATENCY = Histogram("feature_compute_latency_seconds", "Feature 
 
 DEDUP_TTL = 3600
 FEATURE_TTL = 3600
+# Default when user has no prior click (seconds); used for time_since_last_click_user
+DEFAULT_TIME_SINCE_LAST_CLICK_SEC = 86400.0  # 24 hours
+LAST_CLICK_TTL_SEC = 86400 * 2  # 2 days
 WINDOWS = {
     "1m": 60,
     "5m": 300,
@@ -112,14 +115,14 @@ def get_time_since_last_click(r: redis.Redis, user_id: str, now_ts: int) -> floa
     key = f"user:{user_id}:last_click"
     val = r.get(key)
     if val is None:
-        return 86400.0  # 24 hours default
+        return DEFAULT_TIME_SINCE_LAST_CLICK_SEC
     last_ts = int(val)
     return (now_ts - last_ts) / 1000.0
 
 
 def set_last_click(r: redis.Redis, user_id: str, ts: int):
     key = f"user:{user_id}:last_click"
-    r.set(key, str(ts), ex=86400 * 2)  # 2 days
+    r.set(key, str(ts), ex=LAST_CLICK_TTL_SEC)
 
 
 def fetch_counts_and_update(r: redis.Redis, event: Event) -> dict:
