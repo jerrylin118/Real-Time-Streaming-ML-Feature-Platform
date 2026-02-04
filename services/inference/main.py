@@ -33,7 +33,7 @@ FEATURE_ORDER = [
 ]
 
 DEFAULT_PROBABILITY = 0.05
-MODEL_VERSION = "1.0.0"
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "1.0.0")
 
 
 def get_redis():
@@ -51,6 +51,19 @@ def load_model():
 
 
 _model, is_baseline = load_model()
+
+
+def _parse_redis_features(raw: dict) -> dict:
+    """Convert Redis hash (bytes or str keys/values) to dict of float feature values."""
+    features = {}
+    for k, v in raw.items():
+        key = k.decode("utf-8") if isinstance(k, bytes) else k
+        val = v.decode("utf-8") if isinstance(v, bytes) else v
+        try:
+            features[key] = float(val)
+        except ValueError:
+            features[key] = 0.0
+    return features
 
 
 def predict_probability(model_or_none, features: dict) -> float:
@@ -100,15 +113,7 @@ def predict(req: PredictRequest):
             cold_start=True,
         )
 
-    features = {}
-    for k, v in raw.items():
-        key = k.decode("utf-8") if isinstance(k, bytes) else k
-        val = v.decode("utf-8") if isinstance(v, bytes) else v
-        try:
-            features[key] = float(val)
-        except ValueError:
-            features[key] = 0.0
-
+    features = _parse_redis_features(raw)
     prob = predict_probability(_model, features)
 
     REQUEST_COUNT.labels(cold_start="false").inc()
