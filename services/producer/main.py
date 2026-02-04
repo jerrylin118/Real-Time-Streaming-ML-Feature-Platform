@@ -16,9 +16,11 @@ ITEM_IDS = [f"i{i}" for i in range(50)]
 DEVICES = ["mobile", "desktop", "tablet"]
 COUNTRIES = ["US", "UK", "DE", "FR", "JP", "IN", "BR", "CA"]
 
-# Weighted: some users/items more active
+# Weighted: some users/items more active (improves feature signal)
 USER_WEIGHTS = [10 if i < 20 else 5 if i < 50 else 1 for i in range(100)]
 ITEM_WEIGHTS = [15 if i < 10 else 5 if i < 25 else 1 for i in range(50)]
+# Click probability after impression (EVENTS_PER_SEC controls impression rate)
+CLICK_PROBABILITY = 0.08
 
 
 def weighted_choice(items, weights):
@@ -78,7 +80,7 @@ def main():
         )
 
         # Probabilistically emit click shortly after (CTR ~5-10%)
-        if random.random() < 0.08:
+        if random.random() < CLICK_PROBABILITY:
             time.sleep(random.uniform(0.1, 1.0))
             click_ts = int(datetime.utcnow().timestamp() * 1000)
             click = create_event("click", click_ts, user_id, item_id, session_id, device, country)
