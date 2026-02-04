@@ -189,6 +189,12 @@ chmod +x scripts/smoke_test.sh
 
 The smoke test waits for inference to be healthy, allows events to flow, then calls `/predict` and verifies the probability is between 0 and 1.
 
+## Troubleshooting
+
+- **Redpanda / init_kafka timeouts**: Ensure Redpanda uses a single advertised listener (`redpanda:9092`) so Kafka clients receive a reachable broker address.
+- **Redis connection refused**: Wait for the redis service to be healthy before starting the processor; check with `docker compose ps`.
+- **Cold start on every predict**: Features are keyed by `(user_id, item_id)`; run the producer and processor for a short while so features are written to Redis for the user/item you query.
+
 ## Project Structure
 
 ```
